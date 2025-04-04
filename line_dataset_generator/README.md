@@ -12,7 +12,7 @@ Given a scanned image and a target text file, the objective is to detect and cut
 
 ## How it Works
 
-To avoid manual cutting out of the text lines and aligning them manually, we employ an automatic method. Even though Surya-ocr is not perfect without fine-tuning, we can use it to detect text boxes and their approximate text. Next, we align the target text to the predicted boxes based on the predicted text (at least a partial match is expected). We use heuristics such as text length, relative Levenshtein distance and next line checking.
+To avoid manual cutting out of the text lines and aligning them to the targets, we employ an automatic method. Even though Surya-ocr is not perfect without fine-tuning, we can use it to detect text boxes and their approximate text. Next, we align the target text to the predicted boxes based on the predicted text (at least a partial match is expected). We use heuristics such as text length, relative Levenshtein distance and next line checking.
 
 ## How to Run
 

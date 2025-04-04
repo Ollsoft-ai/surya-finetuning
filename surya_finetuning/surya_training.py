@@ -21,7 +21,7 @@ LEADING_META_TOKENS_COUNT = 2
 parser = argparse.ArgumentParser()
 # NOTE: IMPORTANT!!! change the language code below, see https://en.wikipedia.org/wiki/List_of_ISO_639_language_codes
 parser.add_argument("--lang", default="cs", type=str, help="Language code of the documents")
-parser.add_argument("--batch_size", default=10, type=int, help="Batch size.")
+parser.add_argument("--batch_size", default=5, type=int, help="Batch size.")
 parser.add_argument("--epochs", default=7, type=int, help="Number of epochs.")
 parser.add_argument("--epochs_warmup", default=1, type=int, help="Number of epochs during which the LR is increased linearly from zero to the specified value. Currently does nothing.")
 parser.add_argument("--label_smoothing", default=0., type=float, help="Label smoothing.")
@@ -189,8 +189,8 @@ def main(args: argparse.Namespace) -> None:
     except KeyboardInterrupt:
         pass
 
-    os.mkdir(os.path.join(args.logdir, "pretrained_model"))
-    custom_model.save_model(os.path.join(args.logdir, "pretrained_model"))
+    os.mkdir(os.path.join(args.logdir, "finetuned_model"))
+    custom_model.save_model(os.path.join(args.logdir, "finetuned_model"))
     
 
 if __name__ == "__main__":

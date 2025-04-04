@@ -20,7 +20,7 @@ dataset
     └── labels.csv
 ```
 
-The images in the `images` folder are cropped single lines. The `labels.csv` (a **valid** csv file) contain the gold labels for each image. The images annotated in `labels.csv` must be a subset of the images ine the `images` folder. The format is as follows:
+The images in the `images` folder are cropped single lines. The `labels.csv` (a **valid** csv file) contains the gold labels for each image. The images annotated in `labels.csv` must be a subset of the images ine the `images` folder. The format is as follows:
 
 ```csv
 img0.png,"Lorem ipsum dolor sit amet, consectetur adipiscing elit."
@@ -35,6 +35,12 @@ Datasets can be generated using the [`line_dataset_generator`](../line_dataset_g
 ### Running the Training Procedure
 
 Set up and activate the virtual environment as [described](../README.md#set-up-requirements).
+
+Change to this directory:
+
+```bash
+cd surya_finetuning/
+```
 
 The training procedure is provided in the file `surya_training.py`. To run the training procedure, first inspect the command-line arguments. The arguments can be specified either in the command or directly in the script by changing their default value. It is **important** that you change the `language` argument to your language code.
 
@@ -67,7 +73,7 @@ python3 surya_training.py [--batch_size BATCH_SIZE] [--epochs EPOCHS] [--epochs_
 
 Or simply (if you want to use the values specified in the script):
 
-```
+```bash
 python3 surya_training.py
 ```
 
@@ -77,13 +83,13 @@ All outputs of the training are saved in the `logs` directory. Each run will cre
 
 1. `tensorboard` training logs, which can be visualized using
 
-    ```
+    ```bash
     tensorboard --logdir logs
     ```
 
     and following the instructions in the terminal,
 
-1. saved `torch` recognition model in `pretrained_model/model.pt`.
+1. saved `torch` recognition model in `finetuned_model/model.pt`.
 
 ## Inference
 
