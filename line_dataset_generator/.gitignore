@@ -1,0 +1,6 @@
+scans_prepared/*
+scans_jpg/*
+test_set/*
+*.zip
+*.tgz
+*.pth
