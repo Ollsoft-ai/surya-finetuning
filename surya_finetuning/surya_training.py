@@ -225,6 +225,10 @@ def main(args: argparse.Namespace) -> None:
 
     rec_model, rec_processor = load_rec_model(), load_rec_processor()
 
+    # Freeze all model parameters (https://github.com/VikParuchuri/surya/issues/40#issuecomment-1962739520)
+    for param in rec_model.parameters():
+        param.requires_grad = False
+
     # Load the data.
     dataset = ImageTextDataset(args.dataset_path)
     dataset_train, dataset_dev = torch.utils.data.random_split(dataset, [0.9, 0.1])
