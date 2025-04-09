@@ -63,6 +63,8 @@ options:
   --threads THREADS     Maximum number of threads to use.
   --dataset_path DATASET_PATH
                         Path to the dataset folder.
+  --early_stopping_patience
+                        Patience for early stopping (epochs without improvement). Default: -1 (disabled).
 ```
 
 Once you are familiar with the arguments, run the script as follows:
