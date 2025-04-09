@@ -144,62 +144,80 @@ def prepare_batch(tok: tokenizer.Byt5LangTokenizer, processor: SuryaProcessor, d
 class CheckpointCallback:
     def __init__(
         self,
-        metric_name="dev_acc",
-        mode="max",
-        patience=-1,          # -1 = disabled, >0 = enabled
+        primary_metric="dev_acc",  # Main metric to optimize
+        secondary_metric="dev_loss",  # Secondary metric for tie-breaking
+        primary_mode="max",          # "max" for accuracy, "min" for loss
+        secondary_mode="min",
+        patience=-1,                 
         min_delta=0.001,
         restore_best_weights=True
     ):
-        self.metric_name = metric_name
-        self.mode = mode
+        self.primary_metric = primary_metric
+        self.secondary_metric = secondary_metric
+        self.primary_mode = primary_mode
+        self.secondary_mode = secondary_mode
         self.patience = patience
         self.min_delta = min_delta
         self.restore_best_weights = restore_best_weights
-
-        self.best_metric = -float("inf") if mode == "max" else float("inf")
+        
+        # Track best metrics
+        self.best_primary = -float("inf") if primary_mode == "max" else float("inf")
+        self.best_secondary = -float("inf") if secondary_mode == "max" else float("inf")
         self.best_epoch = -1
         self.best_checkpoint_dir = None
         self.wait = 0
-        self.stopped_epoch = 0
 
     def __call__(self, model, epoch, logs):
         if not hasattr(model, 'save_model'):
             return
 
-        current_metric = logs.get(self.metric_name)
-        if current_metric is None:
-            print(f"Warning: Metric '{self.metric_name}' not found. Skipping checkpoint.")
+        current_primary = logs.get(self.primary_metric)
+        current_secondary = logs.get(self.secondary_metric)
+        
+        if None in (current_primary, current_secondary):
+            print(f"Warning: Metrics {self.primary_metric} or {self.secondary_metric} not found")
             return
 
-        # Check for improvement
-        if self.mode == "max":
-            is_better = (current_metric - self.best_metric) > self.min_delta
-        else:
-            is_better = (self.best_metric - current_metric) > self.min_delta
+        # Check if current model is better
+        primary_improved = (
+            (current_primary > self.best_primary + self.min_delta) 
+            if self.primary_mode == "max" 
+            else (current_primary < self.best_primary - self.min_delta)
+        )
+        
+        # If primary metric is equal, check secondary metric
+        primary_equal = abs(current_primary - self.best_primary) < self.min_delta
+        secondary_improved = (
+            (current_secondary > self.best_secondary + self.min_delta)
+            if self.secondary_mode == "max"
+            else (current_secondary < self.best_secondary - self.min_delta)
+        )
 
-        if is_better:
+        if primary_improved or (primary_equal and secondary_improved):
             self.wait = 0
-            self.best_metric = current_metric
+            self.best_primary = current_primary
+            self.best_secondary = current_secondary
             self.best_epoch = epoch + 1
-
-            # Save best model
+            
+            # Save new best model
             if self.best_checkpoint_dir is not None:
                 import shutil
                 shutil.rmtree(self.best_checkpoint_dir, ignore_errors=True)
-
+            
             self.best_checkpoint_dir = os.path.join(model.logdir, "best_model")
             os.makedirs(self.best_checkpoint_dir, exist_ok=True)
             model.save_model(self.best_checkpoint_dir)
-            print(f"New best model (epoch {self.best_epoch}, {self.metric_name}={self.best_metric:.4f})")
+            print(f"New best model (epoch {self.best_epoch}): "
+                  f"{self.primary_metric}={self.best_primary:.4f}, "
+                  f"{self.secondary_metric}={self.best_secondary:.4f}")
         else:
             self.wait += 1
-            if self.patience > 0:  # Only log if early stopping is enabled
-                print(f"No improvement for {self.wait}/{self.patience} epochs.")
+            if self.patience > 0:
+                print(f"No improvement for {self.wait}/{self.patience} epochs")
 
-        # Early stopping check (skip if patience=-1)
+        # Early stopping check
         if self.patience > 0 and self.wait >= self.patience:
-            self.stopped_epoch = epoch + 1
-            print(f"\nEarly stopping at epoch {self.stopped_epoch}.")
+            print(f"\nEarly stopping at epoch {epoch + 1}")
             if self.restore_best_weights and self.best_checkpoint_dir:
                 print("Restoring best model weights...")
                 best_model_path = os.path.join(self.best_checkpoint_dir, "model.pt")
@@ -256,9 +274,11 @@ def main(args: argparse.Namespace) -> None:
     )
     callbacks = [
         CheckpointCallback(
-            metric_name="dev_acc",
-            mode="max",
-            patience=args.early_stopping_patience,  # Set via command line
+            primary_metric="dev_acc",
+            secondary_metric="dev_loss",
+            primary_mode="max",  # Higher accuracy is better
+            secondary_mode="min",  # Lower loss is better
+            patience=args.early_stopping_patience,
             min_delta=0.001,
             restore_best_weights=True
         )
