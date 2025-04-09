@@ -30,7 +30,7 @@ parser.add_argument("--lr_decay", default=False, type=bool, help="Use cosine dec
 parser.add_argument("--weight_decay", default=5e-3, type=float, help="Weight decay in the optimizer. Currently does nothing")
 parser.add_argument("--seed", default=43, type=int, help="Random seed.")
 parser.add_argument("--threads", default=8, type=int, help="Maximum number of threads to use.")
-
+parser.add_argument("--early_stopping_patience", type=int, default=-1, help="Patience for early stopping (epochs without improvement). Default: -1 (disabled).")
 parser.add_argument("--dataset_path", default="../dataset", type=str, help="Path to the dataset folder.")
 
 
@@ -74,7 +74,7 @@ class OllsoftRecModel(TrainableModule):
 
 
         predictions = torch.zeros((padded_tokens.shape[0], padded_tokens.shape[1] - LEADING_META_TOKENS_COUNT, self._model.decoder.vocab_size), device=self._model.device)
-        
+
         for slc in range(LEADING_META_TOKENS_COUNT, padded_tokens.shape[1]):
             if slc == LEADING_META_TOKENS_COUNT:
                 data_slice = padded_tokens[:, :slc]
@@ -105,8 +105,8 @@ class OllsoftRecModel(TrainableModule):
     def save_model(self, folder_path: str):
         with open(os.path.join(folder_path, "model.pt"), "wb") as model_file:
             torch.save(self._model, model_file)
-            
-            
+
+
 
 # Currently not used
 class CosineWithWarmup(torch.optim.lr_scheduler.LambdaLR):
@@ -129,7 +129,7 @@ def prepare_batch(tok: tokenizer.Byt5LangTokenizer, processor: SuryaProcessor, d
         tokenized_label.append(tok.eos_id)
 
     labels_tokenized = torch.nn.utils.rnn.pad_sequence([torch.tensor(t) for t in tokenized], batch_first=True, padding_value=tok.pad_id)
-    
+
     target = labels_tokenized[:, LEADING_META_TOKENS_COUNT:]
 
     mask = labels_tokenized != tok.pad_id
@@ -139,7 +139,73 @@ def prepare_batch(tok: tokenizer.Byt5LangTokenizer, processor: SuryaProcessor, d
 
 
     return ((pixel_values, labels_tokenized, mask), target)
-    
+
+# Added early stopping patience and save best model in training
+class CheckpointCallback:
+    def __init__(
+        self,
+        metric_name="dev_acc",
+        mode="max",
+        patience=-1,          # -1 = disabled, >0 = enabled
+        min_delta=0.001,
+        restore_best_weights=True
+    ):
+        self.metric_name = metric_name
+        self.mode = mode
+        self.patience = patience
+        self.min_delta = min_delta
+        self.restore_best_weights = restore_best_weights
+
+        self.best_metric = -float("inf") if mode == "max" else float("inf")
+        self.best_epoch = -1
+        self.best_checkpoint_dir = None
+        self.wait = 0
+        self.stopped_epoch = 0
+
+    def __call__(self, model, epoch, logs):
+        if not hasattr(model, 'save_model'):
+            return
+
+        current_metric = logs.get(self.metric_name)
+        if current_metric is None:
+            print(f"Warning: Metric '{self.metric_name}' not found. Skipping checkpoint.")
+            return
+
+        # Check for improvement
+        if self.mode == "max":
+            is_better = (current_metric - self.best_metric) > self.min_delta
+        else:
+            is_better = (self.best_metric - current_metric) > self.min_delta
+
+        if is_better:
+            self.wait = 0
+            self.best_metric = current_metric
+            self.best_epoch = epoch + 1
+
+            # Save best model
+            if self.best_checkpoint_dir is not None:
+                import shutil
+                shutil.rmtree(self.best_checkpoint_dir, ignore_errors=True)
+
+            self.best_checkpoint_dir = os.path.join(model.logdir, "best_model")
+            os.makedirs(self.best_checkpoint_dir, exist_ok=True)
+            model.save_model(self.best_checkpoint_dir)
+            print(f"New best model (epoch {self.best_epoch}, {self.metric_name}={self.best_metric:.4f})")
+        else:
+            self.wait += 1
+            if self.patience > 0:  # Only log if early stopping is enabled
+                print(f"No improvement for {self.wait}/{self.patience} epochs.")
+
+        # Early stopping check (skip if patience=-1)
+        if self.patience > 0 and self.wait >= self.patience:
+            self.stopped_epoch = epoch + 1
+            print(f"\nEarly stopping at epoch {self.stopped_epoch}.")
+            if self.restore_best_weights and self.best_checkpoint_dir:
+                print("Restoring best model weights...")
+                best_model_path = os.path.join(self.best_checkpoint_dir, "model.pt")
+                model.load_state_dict(torch.load(best_model_path))
+            raise KeyboardInterrupt
+
 def main(args: argparse.Namespace) -> None:
     print(f"WARNING: the language is set to {args.lang}. Make sure this is your language.")
     # Set the random seed and the number of threads.
@@ -184,14 +250,29 @@ def main(args: argparse.Namespace) -> None:
         metrics={"acc": torchmetrics.Accuracy(task="multiclass", num_classes=65792, ignore_index=tok.pad_id)},
         logdir=args.logdir,
     )
+    callbacks = [
+        CheckpointCallback(
+            metric_name="dev_acc",
+            mode="max",
+            patience=args.early_stopping_patience,  # Set via command line
+            min_delta=0.001,
+            restore_best_weights=True
+        )
+    ]
     try:
-        custom_model.fit(train, epochs=args.epochs, dev=dev)
+        #custom_model.fit(train, epochs=args.epochs, dev=dev, callbacks=[CheckpointCallback()])
+        custom_model.fit(
+            train,
+            epochs=args.epochs,
+            dev=dev,
+            callbacks=callbacks
+        )
     except KeyboardInterrupt:
         pass
 
     os.mkdir(os.path.join(args.logdir, "finetuned_model"))
     custom_model.save_model(os.path.join(args.logdir, "finetuned_model"))
-    
+
 
 if __name__ == "__main__":
     args = parser.parse_args([] if "__file__" not in globals() else None)
