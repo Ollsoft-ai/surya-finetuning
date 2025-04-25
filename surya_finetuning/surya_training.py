@@ -6,9 +6,11 @@ import os
 import datetime
 import re
 from functools import partial
-from surya.model.recognition.model import load_model as load_rec_model, OCREncoderDecoderModel
-from surya.model.recognition import tokenizer
-from surya.model.recognition.processor import SuryaProcessor, load_processor as load_rec_processor
+
+from surya.recognition import RecognitionPredictor
+from surya.recognition.model.encoderdecoder import OCREncoderDecoderModel
+from surya.recognition import tokenizer, SuryaProcessor
+
 from surya.settings import settings
 import torch.nn.functional as F
 from PIL import Image
@@ -44,15 +46,17 @@ class OllsoftRecModel(TrainableModule):
         self._model.text_encoder.model._setup_cache(self._model.config, args.batch_size, self._model.device, self._model.dtype)
 
         encoder_hidden_states = None
-        batch_size = padded_tokens.shape[0]
-        encoder_batch_size = batch_size // settings.RECOGNITION_ENCODER_BATCH_DIVISOR
-        for z in range(0, images.shape[0], encoder_batch_size):
-            encoder_pixel_values = images[z:min(z + encoder_batch_size, images.shape[0])]
-            encoder_hidden_states_batch = self._model.encoder(pixel_values=encoder_pixel_values).last_hidden_state
-            if encoder_hidden_states is None:
-                encoder_hidden_states = encoder_hidden_states_batch
-            else:
-                encoder_hidden_states = torch.cat([encoder_hidden_states, encoder_hidden_states_batch], dim=0)
+        # batch_size = padded_tokens.shape[0]
+        encoder_hidden_states = self._model.encoder(pixel_values=images).last_hidden_state
+
+        # encoder_batch_size = batch_size // settings.RECOGNITION_ENCODER_BATCH_DIVISOR
+        # for z in range(0, images.shape[0], encoder_batch_size):
+        #     encoder_pixel_values = images[z:min(z + encoder_batch_size, images.shape[0])]
+        #     encoder_hidden_states_batch = self._model.encoder(pixel_values=encoder_pixel_values).last_hidden_state
+        #     if encoder_hidden_states is None:
+        #         encoder_hidden_states = encoder_hidden_states_batch
+        #     else:
+        #         encoder_hidden_states = torch.cat([encoder_hidden_states, encoder_hidden_states_batch], dim=0)
 
 
         # I am not sure what is the purpose of the text_encoder. We only ever feed it ranges of numbers from 0 to 127
@@ -136,7 +140,9 @@ def main(args: argparse.Namespace) -> None:
     ).replace("/", r"_")
     args.logdir = os.path.join("logs", dir_name)
 
-    rec_model, rec_processor = load_rec_model(), load_rec_processor()
+    predictor = RecognitionPredictor()
+    rec_model = predictor.model
+    rec_processor = predictor.processor
 
     # Load the data.
     dataset = ImageTextDataset(args.dataset_path)
@@ -152,7 +158,6 @@ def main(args: argparse.Namespace) -> None:
 
     custom_model = OllsoftRecModel(rec_model)
     optimizer = torch.optim.AdamW(custom_model.parameters(), lr=args.lr, weight_decay=args.weight_decay, eps=1e-5)
-    # optimizer = torch.optim.SGD(custom_model.parameters(), lr=args.lr)
     schedule = CosineWithWarmup(optimizer, args, train)
     custom_model.configure(
         optimizer=optimizer,
