@@ -45,19 +45,7 @@ class OllsoftRecModel(TrainableModule):
     def forward(self, images: torch.Tensor, padded_tokens: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         self._model.text_encoder.model._setup_cache(self._model.config, args.batch_size, self._model.device, self._model.dtype)
 
-        encoder_hidden_states = None
-        # batch_size = padded_tokens.shape[0]
         encoder_hidden_states = self._model.encoder(pixel_values=images).last_hidden_state
-
-        # encoder_batch_size = batch_size // settings.RECOGNITION_ENCODER_BATCH_DIVISOR
-        # for z in range(0, images.shape[0], encoder_batch_size):
-        #     encoder_pixel_values = images[z:min(z + encoder_batch_size, images.shape[0])]
-        #     encoder_hidden_states_batch = self._model.encoder(pixel_values=encoder_pixel_values).last_hidden_state
-        #     if encoder_hidden_states is None:
-        #         encoder_hidden_states = encoder_hidden_states_batch
-        #     else:
-        #         encoder_hidden_states = torch.cat([encoder_hidden_states, encoder_hidden_states_batch], dim=0)
-
 
         # I am not sure what is the purpose of the text_encoder. We only ever feed it ranges of numbers from 0 to 127
         text_encoder_input_ids = torch.arange(

@@ -5,10 +5,8 @@ import os
 import json
 import csv
 
-from surya.ocr import run_ocr
-from surya.model.detection.model import load_model as load_det_model, load_processor as load_det_processor
-from surya.model.recognition.model import load_model as load_rec_model
-from surya.model.recognition.processor import load_processor as load_rec_processor
+from surya.recognition import RecognitionPredictor
+from surya.detection import DetectionPredictor
 import surya.input.processing as surya_image_utils
 
 from typing import List
@@ -63,8 +61,8 @@ def align_all(length_tolerance = 0.2, word_similarity_tolerance = 0.3, sentence_
         with open(os.path.join(DATASET_DIR, "text", "labels.csv"), "w") as labels_file:
             label_csv = csv.writer(labels_file)
             langs = ["cs"] # Replace with your languages - optional but recommended
-            det_processor, det_model = load_det_processor(), load_det_model()
-            rec_model, rec_processor = load_rec_model(), load_rec_processor()
+            recognition_predictor = RecognitionPredictor()
+            detection_predictor = DetectionPredictor()
             for im_name, target_id in target_mapping:
                 print("Processing", im_name)
                 name_noext, _ = os.path.splitext(im_name)
@@ -77,7 +75,7 @@ def align_all(length_tolerance = 0.2, word_similarity_tolerance = 0.3, sentence_
                 image = Image.open(os.path.join(SCANS_DIR, im_name))
                 image = ImageOps.exif_transpose(image)
 
-                predictions = run_ocr([image], [langs], det_model, det_processor, rec_model, rec_processor)
+                predictions = recognition_predictor([image], [langs], detection_predictor)
 
                 img = surya_image_utils.convert_if_not_rgb([image])[0]
                 img_array = np.array(img, dtype=np.uint8)

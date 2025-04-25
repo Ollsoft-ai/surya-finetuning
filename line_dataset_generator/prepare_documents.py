@@ -1,8 +1,7 @@
 from PIL import Image, ImageFile
 import pytesseract
 from pillow_heif import register_heif_opener
-from surya.model.detection.model import load_model as load_det_model, load_processor as load_det_processor
-from surya.detection import batch_text_detection
+from surya.detection import DetectionPredictor
 from qreader import QReader
 import numpy as np
 import sys
@@ -23,8 +22,7 @@ if not os.path.isdir(PREPARED_FOLDER):
     os.mkdir(PREPARED_FOLDER)
 
 qr = QReader()
-det_processor, det_model = load_det_processor(), load_det_model()
-
+detection_predictor = DetectionPredictor()
 
 def fine_rotate_image(detection_result, image: ImageFile.ImageFile):
     """From Surya detection result, estimate the document rotation and fix it"""
@@ -78,7 +76,7 @@ with open("scans_target_mapping.csv", "w") as scans_targets:
             img = img.rotate(orientation, expand=True)
         
         # surya detection model is used to further improve the rotation such that the detected boxes are perfectly horizontal on average
-        detected_polygons = batch_text_detection([img], det_model, det_processor)[0]
+        detected_polygons = detection_predictor([img])[0]
         img = fine_rotate_image(detected_polygons, img)
 
         img.save(os.path.join(PREPARED_FOLDER, raw_name + ".jpg"))

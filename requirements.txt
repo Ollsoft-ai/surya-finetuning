@@ -4,6 +4,6 @@ pillow==10.4.0
 pillow_heif==0.21.0
 pytesseract==0.3.13
 qreader==3.14
-surya-ocr==0.7.0
+surya-ocr==0.13.1
 tensorboard==2.19.0
 torchmetrics==1.7.0
