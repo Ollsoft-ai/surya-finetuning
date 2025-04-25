@@ -21,13 +21,13 @@ LEADING_META_TOKENS_COUNT = 2
 parser = argparse.ArgumentParser()
 # NOTE: IMPORTANT!!! change the language code below, see https://en.wikipedia.org/wiki/List_of_ISO_639_language_codes
 parser.add_argument("--lang", default="cs", type=str, help="Language code of the documents")
-parser.add_argument("--batch_size", default=5, type=int, help="Batch size.")
+parser.add_argument("--batch_size", default=10, type=int, help="Batch size.")
 parser.add_argument("--epochs", default=7, type=int, help="Number of epochs.")
-parser.add_argument("--epochs_warmup", default=1, type=int, help="Number of epochs during which the LR is increased linearly from zero to the specified value. Currently does nothing.")
+parser.add_argument("--epochs_warmup", default=1, type=int, help="Number of epochs during which the LR is increased linearly from zero to the specified value.")
 parser.add_argument("--label_smoothing", default=0., type=float, help="Label smoothing.")
-parser.add_argument("--lr", default=5e-2, type=float, help="Learning rate.")
-parser.add_argument("--lr_decay", default=False, type=bool, help="Use cosine decay? Currently does nothing.")
-parser.add_argument("--weight_decay", default=5e-3, type=float, help="Weight decay in the optimizer. Currently does nothing")
+parser.add_argument("--lr", default=1e-5, type=float, help="Learning rate.")
+parser.add_argument("--lr_decay", default=True, type=bool, help="Use cosine decay?")
+parser.add_argument("--weight_decay", default=5e-3, type=float, help="Weight decay in the optimizer")
 parser.add_argument("--seed", default=43, type=int, help="Random seed.")
 parser.add_argument("--threads", default=8, type=int, help="Maximum number of threads to use.")
 
@@ -41,7 +41,6 @@ class OllsoftRecModel(TrainableModule):
         self._model = model
 
     def forward(self, images: torch.Tensor, padded_tokens: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-        self._model.decoder.model._setup_cache(self._model.config, args.batch_size, self._model.device, self._model.dtype)
         self._model.text_encoder.model._setup_cache(self._model.config, args.batch_size, self._model.device, self._model.dtype)
 
         encoder_hidden_states = None
@@ -72,34 +71,16 @@ class OllsoftRecModel(TrainableModule):
             use_cache=False
         ).hidden_states
 
-
-        predictions = torch.zeros((padded_tokens.shape[0], padded_tokens.shape[1] - LEADING_META_TOKENS_COUNT, self._model.decoder.vocab_size), device=self._model.device)
-        
-        for slc in range(LEADING_META_TOKENS_COUNT, padded_tokens.shape[1]):
-            if slc == LEADING_META_TOKENS_COUNT:
-                data_slice = padded_tokens[:, :slc]
-                mask_slice = mask[:, :slc]
-                decoder_position_ids = torch.ones_like(data_slice[0, :], dtype=torch.int64, device=self._model.device).cumsum(0) - 1
-                is_prefill = True
-            else:
-                data_slice = padded_tokens[:, slc - 1].unsqueeze(1)
-                mask_slice = mask[:, slc - 1].unsqueeze(1)
-                decoder_position_ids = decoder_position_ids[-1:] + 1
-                max_position_id = torch.max(decoder_position_ids).item()
-                decoder_position_ids = torch.ones_like(data_slice[0, :], dtype=torch.int64, device=self._model.device).cumsum(0) - 1 + max_position_id
-                is_prefill = False
-
-            preds = self._model.decoder(
-                input_ids=data_slice,
-                attention_mask=mask_slice,
+        self._model.decoder.model._setup_cache(self._model.config, args.batch_size, self._model.device, self._model.dtype)
+        preds = self._model.decoder(
+                input_ids=padded_tokens,
+                attention_mask=mask,
                 encoder_hidden_states=encoder_text_hidden_states,
-                cache_position=decoder_position_ids,
-                use_cache=True,
-                prefill=is_prefill
+                use_cache=False,
+                prefill=False
             )
-
-            predictions[:, slc - LEADING_META_TOKENS_COUNT, :] = preds["logits"][:, -1, :] # the next token predictions are saved in the last "column", therefore [:, -1, :]
-
+        
+        predictions = preds["logits"][:, LEADING_META_TOKENS_COUNT - 1: -1]      
         return torch.permute(predictions, (0, 2, 1))
 
     def save_model(self, folder_path: str):
@@ -107,8 +88,6 @@ class OllsoftRecModel(TrainableModule):
             torch.save(self._model, model_file)
             
             
-
-# Currently not used
 class CosineWithWarmup(torch.optim.lr_scheduler.LambdaLR):
     def __init__(self, optimizer, args, train):
         self._warmup_steps = args.epochs_warmup * len(train)
@@ -172,15 +151,13 @@ def main(args: argparse.Namespace) -> None:
     dev = torch.utils.data.DataLoader(dataset_dev, args.batch_size, shuffle=True, collate_fn=prepare_batch_partial)
 
     custom_model = OllsoftRecModel(rec_model)
-    # TODO: fix the problem with implicit learning rate (see README.md)
-    #       SGD is used necause it is less sensitive to learning rate
-    #optimizer = torch.optim.AdamW(custom_model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    optimizer = torch.optim.SGD(custom_model.parameters(), lr=args.lr)
-    #schedule = CosineWithWarmup(optimizer, args, train)
+    optimizer = torch.optim.AdamW(custom_model.parameters(), lr=args.lr, weight_decay=args.weight_decay, eps=1e-5)
+    # optimizer = torch.optim.SGD(custom_model.parameters(), lr=args.lr)
+    schedule = CosineWithWarmup(optimizer, args, train)
     custom_model.configure(
         optimizer=optimizer,
         loss=torch.nn.CrossEntropyLoss(label_smoothing=args.label_smoothing, ignore_index=tok.pad_id),
-        # schedule=schedule,
+        schedule=schedule,
         metrics={"acc": torchmetrics.Accuracy(task="multiclass", num_classes=65792, ignore_index=tok.pad_id)},
         logdir=args.logdir,
     )

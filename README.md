@@ -2,8 +2,6 @@
 
 This project publishes a roadmap to fine-tuning the [Surya OCR](https://github.com/VikParuchuri/surya) model.
 
-Please help us solve the [known issues](./surya_finetuning/README.md#known-issues).
-
 ## Set up Requirements
 
 Create a Python virtual environment, activate it, and install the requirements:

@@ -52,13 +52,13 @@ options:
                         Batch size.
   --epochs EPOCHS       Number of epochs.
   --epochs_warmup EPOCHS_WARMUP
-                        Number of epochs during which the LR is increased linearly from zero to the specified value. Currently does nothing.
+                        Number of epochs during which the LR is increased linearly from zero to the specified value.
   --label_smoothing LABEL_SMOOTHING
                         Label smoothing.
   --lr LR               Learning rate.
-  --lr_decay LR_DECAY   Use cosine decay? Currently does nothing.
+  --lr_decay LR_DECAY   Use cosine decay?
   --weight_decay WEIGHT_DECAY
-                        Weight decay in the optimizer. Currently does nothing
+                        Weight decay in the optimizer
   --seed SEED           Random seed.
   --threads THREADS     Maximum number of threads to use.
   --dataset_path DATASET_PATH
@@ -68,7 +68,9 @@ options:
 Once you are familiar with the arguments, run the script as follows:
 
 ```
-python3 surya_training.py [--batch_size BATCH_SIZE] [--epochs EPOCHS] [--epochs_warmup EPOCHS_WARMUP] [--label_smoothing LABEL_SMOOTHING] [--lr LR] [--lr_decay LR_DECAY] [--weight_decay WEIGHT_DECAY] [--seed SEED] [--threads THREADS] [--dataset_path DATASET_PATH]
+python3 surya_training.py [-h] [--lang LANG] [--batch_size BATCH_SIZE] [--epochs EPOCHS] [--epochs_warmup EPOCHS_WARMUP]
+                         [--label_smoothing LABEL_SMOOTHING] [--lr LR] [--lr_decay LR_DECAY] [--weight_decay WEIGHT_DECAY] [--seed SEED]
+                         [--threads THREADS] [--dataset_path DATASET_PATH]
 ```
 
 Or simply (if you want to use the values specified in the script):
@@ -117,7 +119,7 @@ Together with the hidden states from the encoder, the decoder works with tokens,
 
 During inference, only the first special tokens are presented to the decoder. The decoder then makes predictions of the following token for each sample in the batch and caches the tokens seen so far. Next, the most likely token for each sample is selected from the prediction and and fed into the model auto-regressively. This is repeated until it generates the `EOS` token token is generated for each sample.
 
-During training, a batch of target tokens is perpared and padded to the length of the longest sequence. An attention mask is also provided and its corresponding parts are fed into the decoder with the tokens. In the first step, the first special tokens are presented to the decoder and the predicted logits are saved. In the following steps, the rest of the tokens are fed into the decoder one column at a time and the resulting logits are saved. Note that during training, the decoder is *not* auto-regressive.
+During training, a batch of target tokens is perpared and padded to the length of the longest sequence. An attention mask is also provided and its corresponding parts are fed into the decoder with the tokens. The padded token matrix is fed into the decoder and the resulting logits are sliced out and returned. Note that during training, the decoder is *not* auto-regressive.
 
 The true tokens without the first special tokenes are used as target to compute the cross-entropy loss. The loss is then back-propagated using standard `torch` functions.
 
@@ -126,4 +128,4 @@ The true tokens without the first special tokenes are used as target to compute 
 
 ### Learning rate problems
 
-The learning rate seems to be secretly increased by a small number. Setting learning rate to 0 will still result in the model training. This implicit learning rate is high enough to destroy the weights when the `AdamW` optimizer is used. For this reason, we use plain `SGD` instead.
+The learning rate seems to be secretly increased by a small number. Setting learning rate to 0 will still result in the model training. <s>This implicit learning rate is high enough to destroy the weights when the `AdamW` optimizer is used. For this reason, we use plain `SGD` instead.</s> AdamW is now functional, thanks to @Dagamies
