@@ -1,3 +1,6 @@
+> [!IMPORTANT]  
+> [Surya OCR](https://github.com/VikParuchuri/surya) now has its own [fine-tuning script](https://github.com/datalab-to/surya?tab=readme-ov-file#finetuning-surya-ocr), making this repository deprecated to a large extent. No future updates are planned.
+
 # Surya-OCR Fine-Tuning Script
 
 This project publishes a roadmap to fine-tuning the [Surya OCR](https://github.com/VikParuchuri/surya) model.
